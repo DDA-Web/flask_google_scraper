@@ -9,10 +9,13 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import requests
+import os
 import time
 
-app = Flask(__name__)  # 🔹 Ajout du serveur Flask
+# Initialisation de Flask
+app = Flask(__name__)
 
+# Fonction pour analyser une page web
 def analyze_page(url):
     try:
         response = requests.get(url, timeout=10)
@@ -28,7 +31,7 @@ def analyze_page(url):
         else:
             page_type = 'Autre'
 
-        # Structure HN (H1 et tous les H2)
+        # Récupérer la structure HN (H1 et tous les H2)
         h1 = soup.find('h1').text.strip() if soup.find('h1') else "Aucun H1"
         h2s = [tag.text.strip() for tag in soup.find_all('h2')]
 
@@ -68,27 +71,35 @@ def analyze_page(url):
     except Exception as e:
         return {'error': str(e)}
 
+# Route API pour scraper Google
 @app.route('/scrape', methods=['GET'])
 def scrape_google():
     query = request.args.get('query')
     if not query:
         return jsonify({"error": "Veuillez fournir un mot-clé."}), 400
 
+    # Configurer Chrome pour Render
     chrome_options = Options()
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--headless")  # Exécution sans interface graphique
+    chrome_options.add_argument("--no-sandbox")  # Obligatoire pour Render
+    chrome_options.add_argument("--disable-dev-shm-usage")  # Limiter l'utilisation mémoire
+    chrome_options.add_argument("--remote-debugging-port=9222")  # Debugging mode
+    chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN", "/usr/bin/google-chrome")
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 
     try:
         driver.get("https://www.google.fr")
 
+        # Accepter les cookies si nécessaire
         try:
             accept_button = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button#L2AGLb")))
             accept_button.click()
         except:
             pass
 
+        # Rechercher le mot-clé
         search_box = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.NAME, "q")))
         search_box.send_keys(query + Keys.RETURN)
 
@@ -126,4 +137,4 @@ def scrape_google():
         driver.quit()
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=10000, debug=True)  # 🔹 Rend l'API accessible sur Render
+    app.run(host='0.0.0.0', port=10000, debug=True)
