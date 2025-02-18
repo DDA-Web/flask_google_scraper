@@ -5,42 +5,37 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-
+from bs4 import BeautifulSoup
 import requests
 import time
-from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
-# ============
-# FONCTION D'ANALYSE D'UNE PAGE
-# ============
 def analyze_page(url):
     """
-    Récupère h1, h2, nombre de mots, etc.
+    Analyse le contenu d'une page : h1, h2, etc.
     """
     try:
         response = requests.get(url, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Type de page
+        # Type de page (simple)
+        page_type = "Autre"
         if soup.find('article'):
             page_type = 'Article'
         elif soup.find('section') and 'service' in response.text.lower():
             page_type = 'Page de service'
         elif 'comparateur' in response.text.lower():
             page_type = 'Comparateur'
-        else:
-            page_type = 'Autre'
 
-        # H1 + tous les H2
+        # Récupérer H1 + tous les H2
         h1 = soup.find('h1').text.strip() if soup.find('h1') else "Aucun H1"
         h2s = [tag.text.strip() for tag in soup.find_all('h2')]
 
         # Nombre de mots
         words = len(soup.get_text().split())
 
-        # Liens internes/externes
+        # Liens internes vs externes
         links = soup.find_all('a', href=True)
         internal_links = [link['href'] for link in links if url in link['href']]
         external_links = [link['href'] for link in links if url not in link['href']]
@@ -71,43 +66,37 @@ def analyze_page(url):
     except Exception as e:
         return {'error': str(e)}
 
-# ============
-# ROUTE FLASK : /scrape?query=...
-# ============
 @app.route('/scrape', methods=['GET'])
 def scrape_google():
     """
-    Ex: /scrape?query=seo+freelance
+    Exemple d'appel :
+    GET /scrape?query=seo+freelance
     """
     query = request.args.get('query')
     if not query:
         return jsonify({"error": "Veuillez fournir un mot-clé."}), 400
 
-    # ============
-    # CONFIG SELENIUM
-    # ============
+    # Configurer Selenium / Chrome
     chrome_options = Options()
-    chrome_options.add_argument("--headless")        # Mode sans interface
+    chrome_options.add_argument("--headless")      # Mode sans interface
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
 
-    # Lance le navigateur Chrome
     driver = webdriver.Chrome(options=chrome_options)
 
     try:
-        # Aller sur Google FR
         driver.get("https://www.google.fr")
 
-        # Accepter cookies si pop-up
+        # Accepter cookies (si pop-up)
         try:
-            accept_btn = WebDriverWait(driver, 5).until(
+            accept_button = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "button#L2AGLb"))
             )
-            accept_btn.click()
+            accept_button.click()
         except:
             pass
 
-        # Rechercher
+        # Recherche
         search_box = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.NAME, "q"))
         )
@@ -120,16 +109,16 @@ def scrape_google():
         time.sleep(2)
 
         # Récupérer les 10 premiers résultats
-        results = driver.find_elements(By.CSS_SELECTOR, "div.tF2Cxc")[:10]
+        blocks = driver.find_elements(By.CSS_SELECTOR, "div.tF2Cxc")[:10]
         scraped_data = []
 
-        for result in results:
+        for block in blocks:
             try:
-                title = result.find_element(By.CSS_SELECTOR, "h3").text
-                link = result.find_element(By.CSS_SELECTOR, "a").get_attribute("href")
+                title = block.find_element(By.CSS_SELECTOR, "h3").text
+                link = block.find_element(By.CSS_SELECTOR, "a").get_attribute("href")
                 domain = link.split("/")[2]
 
-                # Analyser le contenu de la page
+                # Analyser la page
                 analysis = analyze_page(link)
 
                 scraped_data.append({
@@ -138,9 +127,8 @@ def scrape_google():
                     "title": title,
                     "analysis": analysis
                 })
-
             except Exception as e:
-                print(f"⚠️ Erreur sur un résultat : {e}")
+                print(f"⚠️ Erreur sur un bloc: {e}")
 
         return jsonify(scraped_data)
 
@@ -150,12 +138,7 @@ def scrape_google():
     finally:
         driver.quit()
 
-# ============
-# MAIN
-# ============
+# Pas besoin de app.run() si on utilise Gunicorn + Docker
 if __name__ == "__main__":
-    # Pour test local seulement :
-    # app.run(port=8000, debug=True)
-    #
-    # (Dans Docker ou Gunicorn, on n'utilise pas app.run)
+    # app.run(debug=True, port=8000)
     pass
