@@ -9,25 +9,34 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import requests
+import subprocess
 import os
 import time
 
-# 🔹 Création de l'application Flask
+# Initialisation de Flask
 app = Flask(__name__)
 
-# 🔹 Installer Google Chrome portable (adapté à Render)
-CHROME_PATH = "/opt/chrome/chrome"
-CHROMEDRIVER_PATH = "/opt/chromedriver"
+# ✅ Installation de Chrome (version headless)
+if not os.path.exists("/usr/bin/google-chrome"):
+    subprocess.run(
+        "apt-get update && apt-get install -y google-chrome-stable",
+        shell=True,
+        check=True
+    )
 
-if not os.path.exists(CHROME_PATH):
-    os.system("mkdir -p /opt/chrome")
-    os.system("wget -qO- https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb | dpkg -x - /opt/chrome/")
-    os.environ["GOOGLE_CHROME_BIN"] = CHROME_PATH
+# Configuration de Chrome
+chrome_options = Options()
+chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+chrome_options.add_argument("--headless")
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument("--remote-debugging-port=9222")
+chrome_options.binary_location = "/usr/bin/google-chrome"
 
-if not os.path.exists(CHROMEDRIVER_PATH):
-    os.system("wget -q -O /opt/chromedriver https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip")
-    os.system("unzip /opt/chromedriver -d /opt/")
-    os.environ["CHROMEDRIVER_PATH"] = CHROMEDRIVER_PATH
+# Gestion automatique de ChromeDriver
+service = Service(ChromeDriverManager(version="114.0.5735.90").install())
+
+# ... (keep the rest of your code identical from analyze_page() onwards)
 
 # 🔹 Configuration de Selenium
 chrome_options = Options()
