@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -8,6 +9,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 import requests
 import time
+import os
 
 app = Flask(__name__)
 
@@ -19,7 +21,7 @@ def analyze_page(url):
         response = requests.get(url, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Détection simple du type de page
+        # Type de page (simple)
         page_type = "Autre"
         if soup.find('article'):
             page_type = 'Article'
@@ -35,12 +37,12 @@ def analyze_page(url):
         # Compter le nombre de mots
         words = len(soup.get_text().split())
 
-        # Liens internes et externes
+        # Liens internes / externes
         links = soup.find_all('a', href=True)
         internal_links = [link['href'] for link in links if url in link['href']]
         external_links = [link['href'] for link in links if url not in link['href']]
 
-        # Médias
+        # Médias (images, vidéos, audios, iframes embed)
         images = len(soup.find_all('img'))
         videos = len(soup.find_all('video'))
         audios = len(soup.find_all('audio'))
@@ -69,49 +71,58 @@ def analyze_page(url):
     except Exception as e:
         return {'error': str(e)}
 
-
 @app.route('/scrape', methods=['GET'])
 def scrape_google():
     """
-    Ex: GET /scrape?query=seo+freelance
-    Récupère les 10 premiers résultats Google FR et analyse chaque page.
+    Endpoint: GET /scrape?query=seo+freelance
+    Récupère les 10 premiers résultats Google et analyse chaque page.
     """
     query = request.args.get('query')
     if not query:
-        return jsonify({"error": "Veuillez fournir un mot-clé."}), 400
+        return jsonify({"error": "Veuillez fournir un mot-clé (query)."}), 400
 
-    # Configurer Selenium (Chromium headless)
+    # Configuration de Selenium
+    print("✅ [DEBUG] Configuration Selenium en cours...")
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")   # Ajout pour éviter certains crash
 
-    # Lance le navigateur
-    driver = webdriver.Chrome(options=chrome_options)
+    # Forcer le chemin de chromedriver si nécessaire
+    driver_path = "/usr/bin/chromedriver"  # Sur Debian/Ubuntu avec apt-get install chromium-driver
+    service = Service(driver_path)
+
+    print(f"✅ [DEBUG] On utilise chromedriver: {driver_path}")
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    print("✅ [DEBUG] ChromeDriver initialisé avec succès.")
 
     try:
+        # Aller sur Google
         driver.get("https://www.google.fr")
+        print("✅ [DEBUG] Navigué sur Google.fr")
 
-        # Accepter les cookies si pop-up
+        # Accepter cookies si pop-up
         try:
-            accept_btn = WebDriverWait(driver, 5).until(
+            accept_button = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "button#L2AGLb"))
             )
-            accept_btn.click()
-        except:
-            pass
+            accept_button.click()
+            print("✅ [DEBUG] Bouton cookies cliqué.")
+        except Exception as e:
+            print(f"⚠️ [DEBUG] Pas de pop-up cookies ou erreur: {e}")
 
-        # Recherche
+        # Rechercher le mot-clé
         search_box = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.NAME, "q"))
         )
         search_box.send_keys(query + Keys.RETURN)
+        print(f"✅ [DEBUG] Recherche envoyée: {query}")
 
-        # Attendre l'apparition des résultats
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "div.tF2Cxc"))
         )
-        time.sleep(2)
+        time.sleep(2)  # Laisser un petit délai
 
         # Récupérer les 10 premiers résultats
         blocks = driver.find_elements(By.CSS_SELECTOR, "div.tF2Cxc")[:10]
@@ -134,17 +145,20 @@ def scrape_google():
                 })
 
             except Exception as e:
-                print(f"⚠️ Erreur sur un résultat: {e}")
+                print(f"⚠️ [DEBUG] Erreur sur un bloc de résultats: {e}")
 
         return jsonify(scraped_data)
 
     except Exception as e:
+        print(f"❌ [DEBUG] Erreur globale Selenium: {e}")
         return jsonify({"error": str(e)})
 
     finally:
         driver.quit()
+        print("✅ [DEBUG] Fermeture du navigateur.")
 
-# Aucune exécution locale si on utilise Gunicorn/Docker
+# Sur Docker+Gunicorn, on ne lance pas app.run()
 if __name__ == "__main__":
-    # app.run(debug=True, port=8000)
+    # Pour test local si besoin :
+    # app.run(port=8000, debug=True)
     pass
