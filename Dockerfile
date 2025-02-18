@@ -20,4 +20,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 8000
 
 # Commande de démarrage : lancer Flask via Gunicorn
-CMD ["gunicorn", "-b", "0.0.0.0:8000", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"]
