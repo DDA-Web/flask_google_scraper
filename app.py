@@ -9,8 +9,15 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import requests
+import subprocess
 import os
 import time
+
+# Installation de Google Chrome et ChromeDriver sur Render
+subprocess.run("wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb", shell=True)
+subprocess.run("apt install -y /tmp/chrome.deb", shell=True)
+subprocess.run("wget -q -O /tmp/chromedriver.zip https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip", shell=True)
+subprocess.run("unzip /tmp/chromedriver.zip -d /usr/bin/", shell=True)
 
 # Initialisation de Flask
 app = Flask(__name__)
@@ -85,7 +92,7 @@ def scrape_google():
     chrome_options.add_argument("--no-sandbox")  # Obligatoire pour Render
     chrome_options.add_argument("--disable-dev-shm-usage")  # Limiter l'utilisation mémoire
     chrome_options.add_argument("--remote-debugging-port=9222")  # Debugging mode
-    chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN", "/usr/bin/google-chrome")
+    chrome_options.binary_location = "/usr/bin/google-chrome-stable"
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 
