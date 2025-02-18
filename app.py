@@ -1,3 +1,4 @@
+from flask import Flask, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -10,13 +11,14 @@ from bs4 import BeautifulSoup
 import requests
 import time
 
-# Fonction pour analyser une page web
+app = Flask(__name__)  # 🔹 Ajout du serveur Flask
+
 def analyze_page(url):
     try:
         response = requests.get(url, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # 1. Détecter le type de page
+        # Détecter le type de page
         if soup.find('article'):
             page_type = 'Article'
         elif soup.find('section') and 'service' in response.text.lower():
@@ -26,7 +28,7 @@ def analyze_page(url):
         else:
             page_type = 'Autre'
 
-        # 2. Récupérer la structure HN (H1 et tous les H2)
+        # Structure HN (H1 et tous les H2)
         h1 = soup.find('h1').text.strip() if soup.find('h1') else "Aucun H1"
         h2s = [tag.text.strip() for tag in soup.find_all('h2')]
 
@@ -35,15 +37,15 @@ def analyze_page(url):
             'H2': h2s
         }
 
-        # 3. Compter le nombre de mots
+        # Nombre de mots
         words = len(soup.get_text().split())
 
-        # 4. Compter les liens internes et externes
+        # Liens internes et externes
         links = soup.find_all('a', href=True)
         internal_links = [link['href'] for link in links if url in link['href']]
         external_links = [link['href'] for link in links if url not in link['href']]
 
-        # 5. Identifier les types de médias présents (images, vidéos, audio, vidéos embed)
+        # Médias (images, vidéos, audio, vidéos embed)
         images = len(soup.find_all('img'))
         videos = len(soup.find_all('video'))
         audios = len(soup.find_all('audio'))
@@ -66,18 +68,19 @@ def analyze_page(url):
     except Exception as e:
         return {'error': str(e)}
 
+@app.route('/scrape', methods=['GET'])
+def scrape_google():
+    query = request.args.get('query')
+    if not query:
+        return jsonify({"error": "Veuillez fournir un mot-clé."}), 400
 
-# Fonction pour scraper Google
-
-def google_scraper():
     chrome_options = Options()
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_argument("--start-maximized")
+    chrome_options.add_argument("--headless")
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 
     try:
-        query = input("\n🔎 Entrez votre recherche Google : ")
         driver.get("https://www.google.fr")
 
         try:
@@ -94,32 +97,33 @@ def google_scraper():
 
         results = driver.find_elements(By.CSS_SELECTOR, "div.tF2Cxc")[:10]
 
-        print(f"\n🔎 Top 10 Google France pour : {query}\n")
+        scraped_data = []
 
-        for i, result in enumerate(results, 1):
+        for result in results:
             try:
                 title = result.find_element(By.CSS_SELECTOR, "h3").text
                 link = result.find_element(By.CSS_SELECTOR, "a").get_attribute("href")
-                domain = link.split("/")[2]  # Extraire le domaine
+                domain = link.split("/")[2]
 
                 analysis = analyze_page(link)
 
-                print(f"{i}. \U0001F3E0 {domain}\n   🔗 {link}")
-                print(f"   📝 Type : {analysis['type']}")
-                print(f"   📰 Structure HN : {analysis['headers']}")
-                print(f"   🔢 Nombre de mots : {analysis['word_count']}")
-                print(f"   🔗 Liens internes : {analysis['internal_links']}, Liens externes : {analysis['external_links']}")
-                print(f"   🎥 Médias : Images: {analysis['media']['images']}, Vidéos: {analysis['media']['videos']}, Audios: {analysis['media']['audios']}, Vidéos embed: {analysis['media']['embedded_videos']}\n")
+                scraped_data.append({
+                    "domain": domain,
+                    "url": link,
+                    "title": title,
+                    "analysis": analysis
+                })
 
             except Exception as e:
                 print(f"⚠️ Erreur sur un résultat : {e}")
 
+        return jsonify(scraped_data)
+
     except Exception as e:
-        print(f"❌ Erreur : {e}")
+        return jsonify({"error": str(e)})
 
     finally:
         driver.quit()
 
-
 if __name__ == "__main__":
-    google_scraper()
+    app.run(host='0.0.0.0', port=10000, debug=True)  # 🔹 Rend l'API accessible sur Render
