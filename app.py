@@ -19,8 +19,9 @@ chromedriver_path = "/tmp/chromedriver"
 
 # Installation de Google Chrome (version portable)
 if not os.path.exists(chrome_path):
-    subprocess.run("wget -q -O /tmp/chrome.tar.gz https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb", shell=True)
-    subprocess.run("tar -xzf /tmp/chrome.tar.gz -C /tmp/", shell=True)
+    subprocess.run("wget -q -O /tmp/chrome https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb", shell=True)
+subprocess.run("dpkg -x /tmp/chrome /tmp/chrome-files", shell=True)
+os.environ["GOOGLE_CHROME_BIN"] = "/tmp/chrome-files/opt/google/chrome/chrome"
 
 # Installation de ChromeDriver (version portable)
 if not os.path.exists(chromedriver_path):
@@ -104,9 +105,9 @@ def scrape_google():
     chrome_options.add_argument("--no-sandbox")  # Obligatoire pour Render
     chrome_options.add_argument("--disable-dev-shm-usage")  # Limiter l'utilisation mémoire
     chrome_options.add_argument("--remote-debugging-port=9222")  # Debugging mode
-    chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN", "/tmp/chrome")
+    chrome_options.binary_location = "/tmp/chrome-files/opt/google/chrome/chrome"
 
-    driver = webdriver.Chrome(service=Service(os.environ.get("CHROMEDRIVER_PATH", "/tmp/chromedriver")), options=chrome_options)
+    driver = webdriver.Chrome(service=Service("/tmp/chromedriver"), options=chrome_options)
 
     try:
         driver.get("https://www.google.fr")
