@@ -13,13 +13,13 @@ app = Flask(__name__)
 
 def analyze_page(url):
     """
-    Analyse le contenu d'une page : h1, h2, etc.
+    Analyse la page : h1, h2, nombre de mots, liens internes/externes, etc.
     """
     try:
         response = requests.get(url, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Type de page (simple)
+        # Détection simple du type de page
         page_type = "Autre"
         if soup.find('article'):
             page_type = 'Article'
@@ -32,10 +32,10 @@ def analyze_page(url):
         h1 = soup.find('h1').text.strip() if soup.find('h1') else "Aucun H1"
         h2s = [tag.text.strip() for tag in soup.find_all('h2')]
 
-        # Nombre de mots
+        # Compter le nombre de mots
         words = len(soup.get_text().split())
 
-        # Liens internes vs externes
+        # Liens internes et externes
         links = soup.find_all('a', href=True)
         internal_links = [link['href'] for link in links if url in link['href']]
         external_links = [link['href'] for link in links if url not in link['href']]
@@ -44,7 +44,10 @@ def analyze_page(url):
         images = len(soup.find_all('img'))
         videos = len(soup.find_all('video'))
         audios = len(soup.find_all('audio'))
-        embedded_videos = len(soup.find_all('iframe', src=lambda x: x and ('youtube' in x or 'vimeo' in x)))
+        embedded_videos = len(soup.find_all(
+            'iframe', 
+            src=lambda x: x and ('youtube' in x or 'vimeo' in x)
+        ))
 
         return {
             'type': page_type,
@@ -66,33 +69,35 @@ def analyze_page(url):
     except Exception as e:
         return {'error': str(e)}
 
+
 @app.route('/scrape', methods=['GET'])
 def scrape_google():
     """
-    Exemple d'appel :
-    GET /scrape?query=seo+freelance
+    Ex: GET /scrape?query=seo+freelance
+    Récupère les 10 premiers résultats Google FR et analyse chaque page.
     """
     query = request.args.get('query')
     if not query:
         return jsonify({"error": "Veuillez fournir un mot-clé."}), 400
 
-    # Configurer Selenium / Chrome
+    # Configurer Selenium (Chromium headless)
     chrome_options = Options()
-    chrome_options.add_argument("--headless")      # Mode sans interface
+    chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
 
+    # Lance le navigateur
     driver = webdriver.Chrome(options=chrome_options)
 
     try:
         driver.get("https://www.google.fr")
 
-        # Accepter cookies (si pop-up)
+        # Accepter les cookies si pop-up
         try:
-            accept_button = WebDriverWait(driver, 5).until(
+            accept_btn = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "button#L2AGLb"))
             )
-            accept_button.click()
+            accept_btn.click()
         except:
             pass
 
@@ -127,8 +132,9 @@ def scrape_google():
                     "title": title,
                     "analysis": analysis
                 })
+
             except Exception as e:
-                print(f"⚠️ Erreur sur un bloc: {e}")
+                print(f"⚠️ Erreur sur un résultat: {e}")
 
         return jsonify(scraped_data)
 
@@ -138,7 +144,7 @@ def scrape_google():
     finally:
         driver.quit()
 
-# Pas besoin de app.run() si on utilise Gunicorn + Docker
+# Aucune exécution locale si on utilise Gunicorn/Docker
 if __name__ == "__main__":
     # app.run(debug=True, port=8000)
     pass
