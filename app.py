@@ -9,15 +9,27 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import requests
-import subprocess
 import os
+import subprocess
 import time
 
-# Installation de Google Chrome et ChromeDriver sur Render
-subprocess.run("wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb", shell=True)
-subprocess.run("apt install -y /tmp/chrome.deb", shell=True)
-subprocess.run("wget -q -O /tmp/chromedriver.zip https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip", shell=True)
-subprocess.run("unzip /tmp/chromedriver.zip -d /usr/bin/", shell=True)
+# Définition des chemins pour Chrome et ChromeDriver
+chrome_path = "/tmp/chrome"
+chromedriver_path = "/tmp/chromedriver"
+
+# Installation de Google Chrome (version portable)
+if not os.path.exists(chrome_path):
+    subprocess.run("wget -q -O /tmp/chrome.tar.gz https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb", shell=True)
+    subprocess.run("tar -xzf /tmp/chrome.tar.gz -C /tmp/", shell=True)
+
+# Installation de ChromeDriver (version portable)
+if not os.path.exists(chromedriver_path):
+    subprocess.run("wget -q -O /tmp/chromedriver.zip https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip", shell=True)
+    subprocess.run("unzip /tmp/chromedriver.zip -d /tmp/", shell=True)
+
+# Définition des variables d’environnement pour Selenium
+os.environ["GOOGLE_CHROME_BIN"] = chrome_path
+os.environ["CHROMEDRIVER_PATH"] = chromedriver_path
 
 # Initialisation de Flask
 app = Flask(__name__)
@@ -92,9 +104,9 @@ def scrape_google():
     chrome_options.add_argument("--no-sandbox")  # Obligatoire pour Render
     chrome_options.add_argument("--disable-dev-shm-usage")  # Limiter l'utilisation mémoire
     chrome_options.add_argument("--remote-debugging-port=9222")  # Debugging mode
-    chrome_options.binary_location = "/usr/bin/google-chrome-stable"
+    chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN", "/tmp/chrome")
 
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    driver = webdriver.Chrome(service=Service(os.environ.get("CHROMEDRIVER_PATH", "/tmp/chromedriver")), options=chrome_options)
 
     try:
         driver.get("https://www.google.fr")
