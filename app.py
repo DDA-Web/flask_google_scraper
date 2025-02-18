@@ -9,32 +9,41 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import requests
-import subprocess
 import os
 import time
 
-# Initialisation de Flask
+# 🔹 Création de l'application Flask
 app = Flask(__name__)
 
-# ✅ Installation de Google Chrome et ChromeDriver via webdriver_manager
+# 🔹 Installer Google Chrome portable (adapté à Render)
+CHROME_PATH = "/opt/chrome/chrome"
+CHROMEDRIVER_PATH = "/opt/chromedriver"
+
+if not os.path.exists(CHROME_PATH):
+    os.system("mkdir -p /opt/chrome")
+    os.system("wget -qO- https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb | dpkg -x - /opt/chrome/")
+    os.environ["GOOGLE_CHROME_BIN"] = CHROME_PATH
+
+if not os.path.exists(CHROMEDRIVER_PATH):
+    os.system("wget -q -O /opt/chromedriver https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip")
+    os.system("unzip /opt/chromedriver -d /opt/")
+    os.environ["CHROMEDRIVER_PATH"] = CHROMEDRIVER_PATH
+
+# 🔹 Configuration de Selenium
 chrome_options = Options()
-chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-chrome_options.add_argument("--headless")  # Mode sans interface graphique
-chrome_options.add_argument("--no-sandbox")  # Obligatoire sur Render
-chrome_options.add_argument("--disable-dev-shm-usage")  # Limiter la mémoire
-chrome_options.add_argument("--remote-debugging-port=9222")
+chrome_options.add_argument("--headless")
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument("--disable-gpu")
+chrome_options.binary_location = CHROME_PATH
 
-# Utilisation automatique de webdriver_manager pour gérer Chrome et ChromeDriver
-chrome_options.binary_location = "/usr/bin/google-chrome-stable"
-service = Service(ChromeDriverManager().install())
-
-# Fonction pour analyser une page web
+# 🔹 Fonction pour analyser une page web
 def analyze_page(url):
     try:
         response = requests.get(url, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Détecter le type de page
+        # Type de contenu
         if soup.find('article'):
             page_type = 'Article'
         elif soup.find('section') and 'service' in response.text.lower():
@@ -44,14 +53,9 @@ def analyze_page(url):
         else:
             page_type = 'Autre'
 
-        # Récupérer la structure HN (H1 et tous les H2)
+        # Structure HN
         h1 = soup.find('h1').text.strip() if soup.find('h1') else "Aucun H1"
         h2s = [tag.text.strip() for tag in soup.find_all('h2')]
-
-        headers = {
-            'H1': h1,
-            'H2': h2s
-        }
 
         # Nombre de mots
         words = len(soup.get_text().split())
@@ -61,7 +65,7 @@ def analyze_page(url):
         internal_links = [link['href'] for link in links if url in link['href']]
         external_links = [link['href'] for link in links if url not in link['href']]
 
-        # Médias (images, vidéos, audio, vidéos embed)
+        # Médias
         images = len(soup.find_all('img'))
         videos = len(soup.find_all('video'))
         audios = len(soup.find_all('audio'))
@@ -69,7 +73,7 @@ def analyze_page(url):
 
         return {
             'type': page_type,
-            'headers': headers,
+            'headers': {'H1': h1, 'H2': h2s},
             'word_count': words,
             'internal_links': len(internal_links),
             'external_links': len(external_links),
@@ -84,13 +88,14 @@ def analyze_page(url):
     except Exception as e:
         return {'error': str(e)}
 
-# Route API pour scraper Google
+# 🔹 Route API pour scraper Google
 @app.route('/scrape', methods=['GET'])
 def scrape_google():
     query = request.args.get('query')
     if not query:
         return jsonify({"error": "Veuillez fournir un mot-clé."}), 400
 
+    service = Service(CHROMEDRIVER_PATH)
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
