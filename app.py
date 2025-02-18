@@ -160,5 +160,5 @@ def scrape_google():
 # Sur Docker+Gunicorn, on ne lance pas app.run()
 if __name__ == "__main__":
     # Pour test local si besoin :
-    # app.run(port=8000, debug=True)
+    app.run(host="0.0.0.0", port=8000, debug=True)
     pass
