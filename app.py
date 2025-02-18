@@ -9,31 +9,24 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import requests
-import os
 import subprocess
+import os
 import time
-
-# Définition des chemins pour Chrome et ChromeDriver
-chrome_path = "/tmp/chrome"
-chromedriver_path = "/tmp/chromedriver"
-
-# Installation de Google Chrome (version portable)
-if not os.path.exists(chrome_path):
-    subprocess.run("wget -q -O /tmp/chrome https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb", shell=True)
-subprocess.run("dpkg -x /tmp/chrome /tmp/chrome-files", shell=True)
-os.environ["GOOGLE_CHROME_BIN"] = "/tmp/chrome-files/opt/google/chrome/chrome"
-
-# Installation de ChromeDriver (version portable)
-if not os.path.exists(chromedriver_path):
-    subprocess.run("wget -q -O /tmp/chromedriver.zip https://chromedriver.storage.googleapis.com/114.0.5735.90/chromedriver_linux64.zip", shell=True)
-    subprocess.run("unzip /tmp/chromedriver.zip -d /tmp/", shell=True)
-
-# Définition des variables d’environnement pour Selenium
-os.environ["GOOGLE_CHROME_BIN"] = chrome_path
-os.environ["CHROMEDRIVER_PATH"] = chromedriver_path
 
 # Initialisation de Flask
 app = Flask(__name__)
+
+# ✅ Installation de Google Chrome et ChromeDriver via webdriver_manager
+chrome_options = Options()
+chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+chrome_options.add_argument("--headless")  # Mode sans interface graphique
+chrome_options.add_argument("--no-sandbox")  # Obligatoire sur Render
+chrome_options.add_argument("--disable-dev-shm-usage")  # Limiter la mémoire
+chrome_options.add_argument("--remote-debugging-port=9222")
+
+# Utilisation automatique de webdriver_manager pour gérer Chrome et ChromeDriver
+chrome_options.binary_location = "/usr/bin/google-chrome-stable"
+service = Service(ChromeDriverManager().install())
 
 # Fonction pour analyser une page web
 def analyze_page(url):
@@ -98,16 +91,7 @@ def scrape_google():
     if not query:
         return jsonify({"error": "Veuillez fournir un mot-clé."}), 400
 
-    # Configurer Chrome pour Render
-    chrome_options = Options()
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_argument("--headless")  # Exécution sans interface graphique
-    chrome_options.add_argument("--no-sandbox")  # Obligatoire pour Render
-    chrome_options.add_argument("--disable-dev-shm-usage")  # Limiter l'utilisation mémoire
-    chrome_options.add_argument("--remote-debugging-port=9222")  # Debugging mode
-    chrome_options.binary_location = "/tmp/chrome-files/opt/google/chrome/chrome"
-
-    driver = webdriver.Chrome(service=Service("/tmp/chromedriver"), options=chrome_options)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
         driver.get("https://www.google.fr")
