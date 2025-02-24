@@ -6,18 +6,19 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import requests
 import time
 import logging
+import os
 
 app = Flask(__name__)
 
+# Configuration du logging
 logging.basicConfig(level=logging.INFO)
 
 def analyze_page(url):
-    
+    """Analyse une page web et retourne ses métriques SEO"""
     try:
         response = requests.get(url, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -77,14 +78,15 @@ def scrape_google():
         chrome_options.add_argument("--disable-gpu")
         chrome_options.binary_location = "/usr/bin/chromium"
 
-        service = Service(ChromeDriverManager().install())
+        # Chemin explicite vers chromedriver
+        service = Service(executable_path="/usr/bin/chromedriver")
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.set_page_load_timeout(30)
 
         driver.get("https://www.google.fr")
         time.sleep(2)
 
-        # Gestion des cookies (corrigé)
+        # Gestion des cookies
         try:
             accept_btn = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "button#L2AGLb"))
@@ -98,7 +100,7 @@ def scrape_google():
         search_box.send_keys(query + Keys.RETURN)
         time.sleep(3)
 
-        # Attente des résultats (corrigé)
+        # Extraction des résultats
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "div.tF2Cxc"))
         )
