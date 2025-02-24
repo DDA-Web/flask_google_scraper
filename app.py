@@ -13,7 +13,7 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
 def get_driver():
-    """Configuration ultra-robuste pour Railway"""
+    """Configuration optimisée contre les blocages"""
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
@@ -21,20 +21,21 @@ def get_driver():
     chrome_options.add_argument("--window-size=1280x720")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36")
     chrome_options.binary_location = "/usr/bin/chromium"
 
     service = Service(
         executable_path="/usr/bin/chromedriver",
-        service_args=["--verbose", "--log-path=/tmp/chromedriver.log"]
+        service_args=["--verbose"]
     )
     
     driver = webdriver.Chrome(service=service, options=chrome_options)
-    driver.set_page_load_timeout(45)
+    driver.set_page_load_timeout(60)
     return driver
 
 @app.route('/scrape', methods=['GET'])
 def scrape_google_fr():
-    """Version finale testée"""
+    """Version finale avec gestion d'erreur renforcée"""
     query = request.args.get('query')
     if not query:
         return jsonify({"error": "Paramètre 'query' requis"}), 400
@@ -42,27 +43,29 @@ def scrape_google_fr():
     driver = None
     try:
         driver = get_driver()
-        driver.get(f"https://www.google.fr/search?q={query}&gl=fr")
-        logging.info("Page chargée avec succès")
-
-        # Vérification basique du contenu
+        driver.get(f"https://www.google.com/search?q={query}&gl=fr")
+        
+        # Attente générique du contenu principal
         WebDriverWait(driver, 30).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
+            lambda d: d.find_element(By.TAG_NAME, "body").text != ""
         )
 
-        # Sélecteur simplifié pour les résultats
-        search_results = WebDriverWait(driver, 30).until(
-            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.g"))
-        )
+        # Contournement anti-bot
+        time.sleep(3)
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(1)
+
+        # Sélecteur amélioré pour les résultats
+        search_results = driver.find_elements(By.CSS_SELECTOR, "div.g, div[data-sokoban-container]")[:10]
 
         results = []
-        for element in search_results[:10]:
+        for element in search_results:
             try:
-                link = element.find_element(By.TAG_NAME, "a").get_attribute("href")
-                title = element.find_element(By.TAG_NAME, "h3").text
+                link = element.find_element(By.CSS_SELECTOR, "a[href]").get_attribute("href")
+                title = element.find_element(By.CSS_SELECTOR, "h3, span[role='heading']").text
                 results.append({"title": title, "link": link})
             except Exception as e:
-                logging.warning(f"Erreur élément: {str(e)}")
+                logging.warning(f"Élément ignoré : {str(e)}")
 
         return jsonify({"query": query, "results": results})
 
