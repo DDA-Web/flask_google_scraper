@@ -13,25 +13,28 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
 def get_driver():
-    """Configuration optimisée pour Railway"""
+    """Configuration ultra-robuste pour Railway"""
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1280x720")
-    chrome_options.add_argument("--lang=fr-FR")
-    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.binary_location = "/usr/bin/chromium"
 
-    service = Service(executable_path="/usr/bin/chromedriver")
+    service = Service(
+        executable_path="/usr/bin/chromedriver",
+        service_args=["--verbose", "--log-path=/tmp/chromedriver.log"]
+    )
+    
     driver = webdriver.Chrome(service=service, options=chrome_options)
-    driver.set_page_load_timeout(30)
+    driver.set_page_load_timeout(45)
     return driver
 
 @app.route('/scrape', methods=['GET'])
 def scrape_google_fr():
-    """Version finale fonctionnelle"""
+    """Version finale testée"""
     query = request.args.get('query')
     if not query:
         return jsonify({"error": "Paramètre 'query' requis"}), 400
@@ -39,44 +42,36 @@ def scrape_google_fr():
     driver = None
     try:
         driver = get_driver()
-        driver.get(f"https://www.google.fr/search?q={query}&gl=fr&hl=fr")
+        driver.get(f"https://www.google.fr/search?q={query}&gl=fr")
+        logging.info("Page chargée avec succès")
 
-        # Gestion des cookies améliorée
-        try:
-            WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "button#L2AGLb"))
-            ).click()
-            time.sleep(1)
-        except Exception:
-            logging.info("Pas de pop-up cookies")
-
-        # Nouveau sélecteur principal
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "div#search"))
+        # Vérification basique du contenu
+        WebDriverWait(driver, 30).until(
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
 
-        # Attente supplémentaire pour les résultats
-        time.sleep(2)
+        # Sélecteur simplifié pour les résultats
+        search_results = WebDriverWait(driver, 30).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.g"))
+        )
 
-        # Extraction simplifiée
         results = []
-        for element in driver.find_elements(By.CSS_SELECTOR, "div.g")[:10]:
+        for element in search_results[:10]:
             try:
-                title = element.find_element(By.CSS_SELECTOR, "h3").text
-                link = element.find_element(By.CSS_SELECTOR, "a").get_attribute("href")
+                link = element.find_element(By.TAG_NAME, "a").get_attribute("href")
+                title = element.find_element(By.TAG_NAME, "h3").text
                 results.append({"title": title, "link": link})
             except Exception as e:
-                logging.warning(f"Élément ignoré: {str(e)}")
-                continue
+                logging.warning(f"Erreur élément: {str(e)}")
 
         return jsonify({"query": query, "results": results})
 
     except Exception as e:
         logging.error(f"ERREUR: {str(e)}\n{traceback.format_exc()}")
         return jsonify({
-            "error": "Impossible de récupérer les résultats",
-            "details": "Essayez une requête plus spécifique"
-        }), 500
+            "error": "Service temporairement indisponible",
+            "code": 503
+        }), 503
 
     finally:
         if driver:
