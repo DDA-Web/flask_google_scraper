@@ -1,19 +1,15 @@
 FROM python:3.10-slim
 
-# 1. Installer Chromium + Driver (versions synchronisées)
+# Installer Chromium 117 + Chromedriver 117.0.5938.0 (versions verrouillées)
 RUN apt-get update && apt-get install -y \
-    chromium \
-    chromium-driver \
+    chromium=117.0.5938.92-1~deb12u1 \
+    chromium-driver=117.0.5938.92-1~deb12u1 \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Configuration de l'app
 WORKDIR /app
 COPY . .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 3. Exposer le port
 EXPOSE 8000
-
-# 4. Lancer l'API
 CMD ["gunicorn", "-b", "0.0.0.0:8000", "--timeout", "120", "app:app"]
