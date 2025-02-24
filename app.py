@@ -5,8 +5,6 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from bs4 import BeautifulSoup
-import requests
 import time
 import logging
 import traceback
@@ -15,76 +13,29 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
 def get_driver():
-    """Configuration optimisée avec timeout ajusté"""
+    """Configuration optimisée contre les blocages"""
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1280x720")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36")
     chrome_options.binary_location = "/usr/bin/chromium"
 
-    service = Service(executable_path="/usr/bin/chromedriver")
+    service = Service(
+        executable_path="/usr/bin/chromedriver",
+        service_args=["--verbose"]
+    )
+    
     driver = webdriver.Chrome(service=service, options=chrome_options)
-    driver.set_page_load_timeout(45)  # Augmentation du timeout
+    driver.set_page_load_timeout(60)
     return driver
 
-def analyze_page(url):
-    """Analyse SEO avec gestion d'erreur améliorée"""
-    try:
-        response = requests.get(url, timeout=15)
-        response.raise_for_status()  # Vérifie le statut HTTP
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Détection type de page
-        page_type = "Autre"
-        if soup.find('article'):
-            page_type = 'Article'
-        elif soup.find('section') and 'service' in response.text.lower():
-            page_type = 'Page de service'
-        elif 'comparateur' in response.text.lower():
-            page_type = 'Comparateur'
-
-        # Extraction HN
-        h1 = soup.find('h1').get_text().strip() if soup.find('h1') else "Aucun H1"
-        h2s = [tag.get_text().strip() for tag in soup.find_all('h2')]
-
-        # Comptage mots
-        word_count = len(soup.get_text(strip=True).split())
-
-        # Analyse liens
-        links = soup.find_all('a', href=True)
-        base_url = url.split('//')[-1].split('/')[0]
-        internal_links = [link['href'] for link in links if base_url in link['href']]
-        external_links = [link['href'] for link in links if base_url not in link['href']]
-
-        # Détection médias
-        images = len(soup.find_all('img'))
-        videos = len(soup.find_all('video'))
-        audios = len(soup.find_all('audio'))
-        embedded_videos = len(soup.find_all('iframe', src=lambda x: x and any(s in x for s in ['youtube', 'vimeo'])))
-
-        return {
-            "type": page_type,
-            "headers": {"H1": h1, "H2": h2s},
-            "word_count": word_count,
-            "internal_links": len(internal_links),
-            "external_links": len(external_links),
-            "media": {
-                "images": images,
-                "videos": videos,
-                "audios": audios,
-                "embedded_videos": embedded_videos
-            }
-        }
-
-    except Exception as e:
-        logging.error(f"Erreur analyse {url}: {str(e)}")
-        return {"error": str(e)}
-
 @app.route('/scrape', methods=['GET'])
-def scrape_and_analyze():
-    """Nouvelle implémentation robuste"""
+def scrape_google_fr():
+    """Version finale avec gestion d'erreur renforcée"""
     query = request.args.get('query')
     if not query:
         return jsonify({"error": "Paramètre 'query' requis"}), 400
@@ -92,46 +43,36 @@ def scrape_and_analyze():
     driver = None
     try:
         driver = get_driver()
-        driver.get(f"https://www.google.fr/search?q={query}&gl=fr")
-
-        # Gestion cookies améliorée
-        try:
-            WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[.//span[contains(., 'Tout accepter')]]"))
-            ).click()
-            time.sleep(1)
-        except Exception:
-            logging.info("Pas de pop-up cookies")
-
-        # Nouveaux sélecteurs Google
-        WebDriverWait(driver, 25).until(  # Augmentation du timeout
-            EC.presence_of_element_located((By.CSS_SELECTOR, "div[role='main']"))
+        driver.get(f"https://www.google.com/search?q={query}&gl=fr")
+        
+        # Attente générique du contenu principal
+        WebDriverWait(driver, 30).until(
+            lambda d: d.find_element(By.TAG_NAME, "body").text != ""
         )
 
-        # Récupération résultats
-        results = driver.find_elements(By.CSS_SELECTOR, "div.g, div[data-header-feature]")[:10]
-        
-        data = []
-        for element in results:
-            try:
-                link = element.find_element(By.CSS_SELECTOR, "a").get_attribute("href")
-                analysis = analyze_page(link)
-                
-                data.append({
-                    "title": element.find_element(By.CSS_SELECTOR, "h3, span[role='heading']").text,
-                    "link": link,
-                    "analysis": analysis
-                })
-            except Exception as e:
-                logging.warning(f"Erreur résultat: {str(e)}")
-                continue
+        # Contournement anti-bot
+        time.sleep(3)
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(1)
 
-        return jsonify({"query": query, "results": data})
+        # Sélecteur amélioré pour les résultats
+        search_results = driver.find_elements(By.CSS_SELECTOR, "div.g, div[data-sokoban-container]")[:10]
+
+        results = []
+        for element in search_results:
+            try:
+                link = element.find_element(By.CSS_SELECTOR, "a[href]").get_attribute("href")
+                title = element.find_element(By.CSS_SELECTOR, "h3, span[role='heading']").text
+                results.append({"title": title, "link": link})
+            except Exception as e:
+                logging.warning(f"Élément ignoré : {str(e)}")
+
+        return jsonify({"query": query, "results": results})
 
     except Exception as e:
-        logging.error(f"ERREUR: {traceback.format_exc()}")
+        logging.error(f"ERREUR: {str(e)}\n{traceback.format_exc()}")
         return jsonify({
-            "error": "Service indisponible - Veuillez réessayer plus tard",
+            "error": "Service temporairement indisponible",
             "code": 503
         }), 503
 
