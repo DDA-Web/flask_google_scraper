@@ -1,24 +1,26 @@
 FROM python:3.10-slim
 
-# Mettre à jour et installer Chromium et Chromium-driver
+# Installer les dépendances système nécessaires pour Chromium
 RUN apt-get update && apt-get install -y \
     chromium \
     chromium-driver \
-    curl \
-    gnupg \
-    unzip \
+    libnss3 \
+    libgconf-2-4 \
+    libfontconfig1 \
+    xvfb \
+    --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copier tous les fichiers du projet dans le conteneur
 COPY . /app
 
-# Installer les dépendances Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Exposer le port 8000
+# Définir la variable d'environnement pour Chrome
+ENV DISPLAY=:99
+ENV CHROME_BIN=/usr/bin/chromium
+
 EXPOSE 8000
 
-# Lancer l'application via Gunicorn
-CMD ["gunicorn", "-b", "0.0.0.0:8000", "app:app"]
+CMD ["gunicorn", "-b", "0.0.0.0:8000", "--timeout", "120", "app:app"]

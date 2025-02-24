@@ -1,5 +1,6 @@
 flask
-selenium
+selenium>=4.0.0
 beautifulsoup4
 requests
 gunicorn
+webdriver-manager 

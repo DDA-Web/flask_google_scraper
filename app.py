@@ -80,13 +80,15 @@ def scrape_google():
     try:
         # Configuration de Selenium pour Chromium
         chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        
-        # Selenium utilisera chromium-driver installé via apt (généralement en /usr/bin/chromedriver)
-        driver = webdriver.Chrome(options=chrome_options)
+chrome_options.add_argument("--headless=new")
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument("--disable-gpu")
+chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+chrome_options.add_argument("--remote-debugging-port=9222")
+chrome_options.binary_location = "/usr/bin/chromium-browser"
+
+driver = webdriver.Chrome(options=chrome_options)
         
         driver.get("https://www.google.fr")
         time.sleep(3)  # Pause pour laisser la page se charger
