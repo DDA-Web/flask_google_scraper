@@ -3,8 +3,11 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from bs4 import BeautifulSoup
+import requests
 import time
 import logging
 import traceback
@@ -12,8 +15,64 @@ import traceback
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
+def analyze_page(url):
+    """Analyse une page web et retourne ses métriques SEO : 
+       - Type de contenu (Article, Page de service, Comparateur, Autre)
+       - Structure Hn (H1 et H2s)
+       - Nombre de mots
+       - Nombre de liens internes/externes
+       - Médias présents (images, vidéos, audios, iframes embed)
+    """
+    try:
+        response = requests.get(url, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # Détection du type de page
+        page_type = "Autre"
+        if soup.find('article'):
+            page_type = 'Article'
+        elif soup.find('section') and 'service' in response.text.lower():
+            page_type = 'Page de service'
+        elif 'comparateur' in response.text.lower():
+            page_type = 'Comparateur'
+
+        # Extraction des headers
+        h1 = soup.find('h1').get_text().strip() if soup.find('h1') else "Aucun H1"
+        h2s = [tag.get_text().strip() for tag in soup.find_all('h2')]
+
+        # Comptage des mots
+        word_count = len(soup.get_text().split())
+
+        # Liens internes et externes
+        links = soup.find_all('a', href=True)
+        internal_links = [link['href'] for link in links if url in link['href']]
+        external_links = [link['href'] for link in links if url not in link['href']]
+
+        # Médias présents
+        images = len(soup.find_all('img'))
+        videos = len(soup.find_all('video'))
+        audios = len(soup.find_all('audio'))
+        embedded_videos = len(soup.find_all('iframe', src=lambda x: x and ('youtube' in x or 'vimeo' in x)))
+
+        return {
+            "type": page_type,
+            "headers": {"H1": h1, "H2": h2s},
+            "word_count": word_count,
+            "internal_links": len(internal_links),
+            "external_links": len(external_links),
+            "media": {
+                "images": images,
+                "videos": videos,
+                "audios": audios,
+                "embedded_videos": embedded_videos
+            }
+        }
+    except Exception as e:
+        logging.error(f"Erreur d'analyse: {str(e)}")
+        return {"error": str(e)}
+
 def get_driver():
-    """Configuration optimisée contre les blocages"""
+    """Configuration optimisée de Selenium pour Chromium"""
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
@@ -22,6 +81,7 @@ def get_driver():
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36")
+    # Pour Chromium installé via apt, le binaire se trouve souvent ici. (Vérifie que c'est le bon chemin sur Railway.)
     chrome_options.binary_location = "/usr/bin/chromium"
 
     service = Service(
@@ -35,22 +95,24 @@ def get_driver():
 
 @app.route('/scrape', methods=['GET'])
 def scrape_google_fr():
-    """Version finale avec gestion d'erreur renforcée"""
+    """Endpoint pour scraper les résultats Google et analyser chaque page.
+       Exemple d'appel : GET /scrape?query=seo+freelance
+    """
     query = request.args.get('query')
     if not query:
         return jsonify({"error": "Paramètre 'query' requis"}), 400
 
     driver = None
     try:
+        logging.info(f"Lancement du scraping pour la requête : {query}")
         driver = get_driver()
+        # On utilise Google avec le paramètre &gl=fr pour cibler la France.
         driver.get(f"https://www.google.com/search?q={query}&gl=fr")
         
         # Attente générique du contenu principal
         WebDriverWait(driver, 30).until(
             lambda d: d.find_element(By.TAG_NAME, "body").text != ""
         )
-
-        # Contournement anti-bot
         time.sleep(3)
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(1)
@@ -63,9 +125,16 @@ def scrape_google_fr():
             try:
                 link = element.find_element(By.CSS_SELECTOR, "a[href]").get_attribute("href")
                 title = element.find_element(By.CSS_SELECTOR, "h3, span[role='heading']").text
-                results.append({"title": title, "link": link})
+                # Appeler analyze_page pour récupérer les métriques supplémentaires
+                analysis = analyze_page(link)
+                results.append({
+                    "title": title,
+                    "link": link,
+                    "analysis": analysis
+                })
             except Exception as e:
                 logging.warning(f"Élément ignoré : {str(e)}")
+                continue
 
         return jsonify({"query": query, "results": results})
 
@@ -79,6 +148,7 @@ def scrape_google_fr():
     finally:
         if driver:
             driver.quit()
+            logging.info("Fermeture du navigateur.")
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000)
+    app.run(host='0.0.0.0', port=8000, debug=True)
