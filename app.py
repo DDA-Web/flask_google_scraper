@@ -13,7 +13,7 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
 def get_driver():
-    """Configuration spécifique pour la France"""
+    """Configuration pour la France corrigée"""
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
@@ -31,7 +31,7 @@ def get_driver():
 
 @app.route('/scrape', methods=['GET'])
 def scrape_google_fr():
-    """Scraping Google France"""
+    """Version fonctionnelle pour Google France"""
     query = request.args.get('query')
     if not query:
         return jsonify({"error": "Paramètre 'query' requis"}), 400
@@ -39,21 +39,22 @@ def scrape_google_fr():
     driver = None
     try:
         driver = get_driver()
-        driver.get(f"https://www.google.fr/search?q={query}&gl=fr&hl=fr")  # Forçage région FR
+        driver.get(f"https://www.google.fr/search?q={query}&gl=fr&hl=fr")
         
-        # Gestion des cookies version française
+        # Correction 1 : Parenthèses fermantes ajoutées
         try:
             WebDriverWait(driver, 3).until(
                 EC.element_to_be_clickable((By.XPATH, '//button/div[contains(text(), "Tout accepter")]'))
-            driver.find_element(By.XPATH, '//button/div[contains(text(), "Tout accepter")]').click()
+            ).click()  # <-- Parenthèse fermante ajoutée ici
             time.sleep(1)
         except Exception:
             logging.info("Pas de pop-up cookies")
 
-        # Vérification de la localisation
+        # Correction 2 : Syntaxe wait corrigée
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, 'div[aria-label="Résultats de recherche"]'))
-        
+        )  # <-- Parenthèse fermante ajoutée
+
         # Extraction des résultats
         results = []
         for element in driver.find_elements(By.CSS_SELECTOR, 'div.g, div.MjjYud')[:10]:
@@ -71,9 +72,8 @@ def scrape_google_fr():
         logging.error(f"ERREUR: {str(e)}\n{traceback.format_exc()}")
         return jsonify({
             "error": "Échec du scraping FR",
-            "details": str(e),
-            "stacktrace": traceback.format_exc()
-        }), 500
+            "details": str(e)
+        }), 500  # <-- Correction 3 : Parenthèse fermante
 
     finally:
         if driver:
