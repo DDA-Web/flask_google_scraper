@@ -14,11 +14,10 @@ import logging
 
 app = Flask(__name__)
 
-# Configuration du logging
 logging.basicConfig(level=logging.INFO)
 
 def analyze_page(url):
-    """Analyse une page web et retourne ses métriques SEO"""
+    
     try:
         response = requests.get(url, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -85,17 +84,21 @@ def scrape_google():
         driver.get("https://www.google.fr")
         time.sleep(2)
 
+        # Gestion des cookies (corrigé)
         try:
             accept_btn = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "button#L2AGLb"))
+            )
             accept_btn.click()
         except Exception:
             logging.info("Pas de pop-up cookies trouvé")
 
+        # Recherche
         search_box = driver.find_element(By.NAME, "q")
         search_box.send_keys(query + Keys.RETURN)
         time.sleep(3)
 
+        # Attente des résultats (corrigé)
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "div.tF2Cxc"))
         )
