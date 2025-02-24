@@ -90,9 +90,10 @@ def scrape_and_analyze():
         driver = get_driver()
         driver.get(f"https://www.google.fr/search?q={query}&gl=fr")
 
-        # Récupération des résultats Google
+        # Récupération des résultats Google (parenthèses corrigées)
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "div.g"))
+        )
         results = driver.find_elements(By.CSS_SELECTOR, "div.g")[:10]
 
         data = []
