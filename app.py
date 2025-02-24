@@ -93,10 +93,11 @@ def scrape_google():
         driver.get("https://www.google.fr")
         time.sleep(2)
 
-        # Gestion des cookies
+        # Gestion des cookies (CORRIGÉ)
         try:
             accept_btn = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "button#L2AGLb"))
+            )
             accept_btn.click()
         except Exception as e:
             logging.info("Pas de pop-up cookies trouvé")
@@ -106,9 +107,10 @@ def scrape_google():
         search_box.send_keys(query + Keys.RETURN)
         time.sleep(3)
 
-        # Extraction des résultats
+        # Extraction des résultats (CORRIGÉ)
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "div.tF2Cxc"))
+        )
         results = driver.find_elements(By.CSS_SELECTOR, "div.tF2Cxc")[:10]
         
         data = []
