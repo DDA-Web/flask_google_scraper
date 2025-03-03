@@ -18,7 +18,7 @@ def analyze_page(url):
         response = requests.get(url, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # 1. Détection du type de page (non affiché dans le top 10)
+        # 1. Détection du type de page
         if soup.find('article'):
             page_type = 'Article'
         elif soup.find('section') and 'service' in response.text.lower():
